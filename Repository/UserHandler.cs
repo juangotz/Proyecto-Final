@@ -39,7 +39,6 @@ public class UserHandler : DbHandler
         }
         return usuarios;
     }
-
     public void DeleteUser(User user)
     {
         try
@@ -66,7 +65,6 @@ public class UserHandler : DbHandler
             Console.WriteLine(ex.Message);
         }
     }
-
     public void UpdateUser(User user)
     {
         try
@@ -111,6 +109,7 @@ public class UserHandler : DbHandler
                     sqlCommand.Parameters.Add(userParameter);
                     sqlCommand.Parameters.Add(mailParameter);
                     sqlCommand.Parameters.Add(passwordParameter);
+                    sqlCommand.Parameters.Add(idParameter);
                     sqlCommand.ExecuteNonQuery();
                 }
 
@@ -122,7 +121,6 @@ public class UserHandler : DbHandler
             Console.WriteLine(ex.Message);
         }
     }
-
     public void CreateUser(User user)
     {
         try
@@ -173,7 +171,6 @@ public class UserHandler : DbHandler
             Console.WriteLine(ex.Message);
         }
     }
-
     public static List<User> LoginMethodPart1(string username, string password)
     {
         List <User> result = new List<User>();
