@@ -1,123 +1,224 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using APICODERHOUSE.Models;
+using Microsoft.Data.SqlClient;
 
-public class SaleHandler : DbHandler
+namespace APICODERHOUSE.Repository
 {
-
-    SqlConnection sqlConnection = new SqlConnection(ConnectionString);
-
-    public List<Sale> GetSale()
+    public class SaleHandler : DBHandler
     {
-        List<Sale> sales = new List<Sale>();
-        using (SqlConnection sqlConnection = new SqlConnection(ConnectionString))
+        SqlConnection sqlConnection = new SqlConnection(ConnectionString);
+        public static List<SaleAndInfo> GetSale()
         {
-            using (SqlCommand sqlCmd = new SqlCommand("SELECT * FROM Venta", sqlConnection))
+            List<SaleAndInfo> sales = new List<SaleAndInfo>();
+            using (SqlConnection sqlConnection = new SqlConnection(ConnectionString))
             {
-                sqlConnection.Open();
-
-                using (SqlDataReader dataReader = sqlCmd.ExecuteReader())
+                string querySelect = "SELECT * FROM Venta AS v INNER JOIN ProductoVendido AS pv ON V.IdProducto = pv.IdProducto";
+                using (SqlCommand sqlCmd = new SqlCommand(querySelect, sqlConnection))
                 {
-                    if (dataReader.HasRows)
+                    sqlConnection.Open();
+
+                    using (SqlDataReader dataReader = sqlCmd.ExecuteReader())
                     {
-                        while (dataReader.Read())
+                        if (dataReader.HasRows)
                         {
-                            Sale sale = new Sale();
-                            sale.id = Convert.ToInt32(dataReader["Id"]);
-                            sale.comment = dataReader["Comentarios"].ToString();
+                            while (dataReader.Read())
+                            {
+                                SaleAndInfo sale = new SaleAndInfo();
+                                sale.id = Convert.ToInt32(dataReader["Id"]);
+                                sale.comment = dataReader["Comentarios"].ToString();
+                                sale.idProduct = Convert.ToInt32(dataReader["IdProducto"]);
+                                sale.stock = Convert.ToInt32(dataReader[""]);
+
+                                sales.Add(sale);
+                            }
                         }
                     }
+                    sqlConnection.Close();
                 }
-                sqlConnection.Close();
+
             }
-
+            return sales;
         }
-        return sales;
-    }
-
-    public void UpdateSoldProduct(Sale sale)
-    {
-        try
+        public static bool CreateSale(Sale sale)
         {
-            using (SqlConnection sqlConnection = new SqlConnection(ConnectionString))
+            bool result = false;
+            try
             {
-                string queryCreate = "UPDATE [SistemaGestion].[dbo].[Venta] " +
-                    "SET Comentarios = @comentarios WHERE Id = @idVenta";
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionString))
+                {
+                    string queryCreate = "INSERT INTO [SistemaGestion].[dbo].[Venta] " +
+                        "(Comentarios, IdProducto) " +
+                        "VALUES (@comentarios, @idProducto)";
 
-                SqlParameter idParameter = new SqlParameter("@idVenta", System.Data.SqlDbType.BigInt)
-                {
-                    Value = sale.id
-                };
-                SqlParameter commentParameter = new SqlParameter("@comentarios", System.Data.SqlDbType.Char)
-                {
-                    Value = sale.comment
-                };
-
-                sqlConnection.Open();
-                using (SqlCommand sqlCommand = new SqlCommand(queryCreate, sqlConnection))
-                {
-                    sqlCommand.Parameters.Add(idParameter);
-                    sqlCommand.Parameters.Add(commentParameter);
-                    sqlCommand.ExecuteNonQuery();
+                    SqlParameter commentParameter = new SqlParameter("@comentarios", System.Data.SqlDbType.Char)
+                    {
+                        Value = sale.comment
+                    };
+                    SqlParameter idProductParameter = new SqlParameter("@idProducto", System.Data.SqlDbType.BigInt)
+                    {
+                        Value = sale.idProduct
+                    };
+                    sqlConnection.Open();
+                    bool confirmProduct = UpdateStockFromCreate(sale.idProduct);
+                    if (confirmProduct == true)
+                    {
+                        using (SqlCommand sqlCommand = new SqlCommand(queryCreate, sqlConnection))
+                        {
+                            sqlCommand.Parameters.Add(commentParameter);
+                            sqlCommand.Parameters.Add(idProductParameter);
+                            int rowsAffected = sqlCommand.ExecuteNonQuery();
+                            if (rowsAffected > 0)
+                            {
+                                result = true;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        throw new Exception("The product that was chose for purchase does not exist.");
+                    }
+                    sqlConnection.Close();
                 }
+                return result;
             }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(ex.Message);
-        }
-    }
-    public void CreateSoldProduct(Sale sale)
-    {
-        try
-        {
-            using (SqlConnection sqlConnection = new SqlConnection(ConnectionString))
+            catch (Exception ex)
             {
-                string queryCreate = "INSERT INTO [SistemaGestion].[dbo].[Venta] " +
-                    "(Comentarios) " +
-                    "VALUES (@comentarios)";
-
-                SqlParameter commentParameter = new SqlParameter("@comentarios", System.Data.SqlDbType.Char)
-                {
-                    Value = sale.comment
-                };
-
-                sqlConnection.Open();
-                using (SqlCommand sqlCommand = new SqlCommand(queryCreate, sqlConnection))
-                {
-                    sqlCommand.Parameters.Add(commentParameter);
-                    sqlCommand.ExecuteNonQuery();
-                }
+                Console.WriteLine(ex.Message);
+                return result;
             }
         }
-        catch (Exception ex)
+        public static bool UpdateStockFromCreate(int id)
         {
-            Console.WriteLine(ex.Message);
-        }
-    }
-    public void DeleteSale(Sale sale)
-    {
-        try
-        {
-            using (SqlConnection sqlConnection = new SqlConnection(ConnectionString))
+            bool result = false;
+            try
             {
-
-
-                string queryDelete = "DELETE FROM [SistemaGestion].[dbo].[Venta] WHERE Id = @idVenta";
-                SqlParameter sqlParameter = new SqlParameter("IdProductoVendido", System.Data.SqlDbType.BigInt)
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionString))
                 {
-                    Value = sale.id
-                };
-                sqlConnection.Open();
-                using (SqlCommand sqlCommand = new SqlCommand(queryDelete, sqlConnection))
-                {
-                    sqlCommand.Parameters.Add(sqlParameter);
-                    sqlCommand.ExecuteScalar();
+                    string queryUpdate = "UPDATE Producto SET Stock = Stock-1 WHERE Id = @IdProducto " +
+                        "UPDATE ProductoVendido SET Stock = Stock+1 WHERE IdProducto = @IdProducto";
+
+                    SqlParameter idParameter = new SqlParameter("idProducto", System.Data.SqlDbType.BigInt)
+                    {
+                        Value = id
+                    };
+                    sqlConnection.Open();
+
+                    using (SqlCommand sqlCommand = new SqlCommand(queryUpdate, sqlConnection))
+                    {
+                        sqlCommand.Parameters.Add(idParameter);
+                        int rowsAffected = sqlCommand.ExecuteNonQuery();
+                        if (rowsAffected > 1)
+                        {
+                            result = true;
+                        }
+                    }
+
+                    sqlConnection.Close();
                 }
-                sqlConnection.Close();
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return result;
             }
         }
-        catch (Exception ex)
+        public static bool DeleteSale(int id)
         {
-            Console.WriteLine(ex.Message);
+            int idProduct = 0;
+            bool result = false;
+            try
+            {
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionString))
+                {
+                    string querySelect = "SELECT IdProducto FROM [SistemaGestion].[dbo].[Venta] " + 
+                        "WHERE Id = @idVenta";
+                    string queryDelete = "DELETE FROM [SistemaGestion].[dbo].[Venta] " +
+                        "WHERE Id = @idVentaa";
+                    SqlParameter idParameter1 = new SqlParameter("idVenta", System.Data.SqlDbType.BigInt)
+                    {
+                        Value = id
+                    };
+                    SqlParameter idParameter2 = new SqlParameter("idVentaa", System.Data.SqlDbType.BigInt)
+                    {
+                        Value = id
+                    };
+                    sqlConnection.Open();
+                    using (SqlCommand sqlCommand = new SqlCommand(querySelect, sqlConnection))
+                    {
+                        sqlCommand.Parameters.Add(idParameter1);
+                        using (SqlDataReader dataReader = sqlCommand.ExecuteReader())
+                        {
+                            if (dataReader.HasRows)
+                            {
+                                while (dataReader.Read())
+                                {
+                                    idProduct = Convert.ToInt32(dataReader["IdProducto"]);
+                                }
+                            }
+                        }
+                    }
+                    bool confirmDelete = UpdateStockFromDelete(idProduct);
+                    if (confirmDelete == true)
+                    {
+                        using (SqlCommand sqlCommand2 = new SqlCommand(queryDelete, sqlConnection))
+                        {
+                            sqlCommand2.Parameters.Add(idParameter2);
+                            int rowsAffected = sqlCommand2.ExecuteNonQuery();
+                            if (rowsAffected > 0)
+                            {
+                                result = true;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("An Error has ocurred while trying to delete the sale");
+                    }
+                    sqlConnection.Close();
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return result;
+            }
+        }
+        public static bool UpdateStockFromDelete(int id)
+        {
+            bool result = false;
+            try
+            {
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionString))
+                {
+                    string queryUpdate = "UPDATE Producto SET Stock = Stock+1 WHERE Id = @IdProducto " +
+                        "UPDATE ProductoVendido SET Stock = Stock-1 WHERE IdProducto = @IdProducto";
+
+                    SqlParameter idParameter = new SqlParameter("idProducto", System.Data.SqlDbType.BigInt)
+                    {
+                        Value = id
+                    };
+                    sqlConnection.Open();
+
+                    using (SqlCommand sqlCommand = new SqlCommand(queryUpdate, sqlConnection))
+                    {
+                        sqlCommand.Parameters.Add(idParameter);
+                        int rowsAffected = sqlCommand.ExecuteNonQuery();
+                        if (rowsAffected > 1)
+                        {
+                            result = true;
+                        }
+                    }
+
+                    sqlConnection.Close();
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return result;
+            }
         }
     }
 }
